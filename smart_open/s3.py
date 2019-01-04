@@ -519,7 +519,7 @@ def iter_bucket(bucket_name, prefix='', accept_key=lambda key: True,
             if True or key_no % 1000 == 0:
                 logger.info(
                     "yielding key #%i: %s, size %i (total %.1fMB)",
-                    key_no, key, len(content), total_size / 1024.0 ** 2
+                    key_no, key['Key'], len(content), total_size / 1024.0 ** 2
                 )
             yield key, content
             total_size += len(content)
@@ -535,16 +535,18 @@ def _list_bucket(bucket_name, prefix='', accept_key=lambda k: True):
     ctoken = None
 
     while True:
-        response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        if ctoken is not None:
+            response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix, ContinuationToken=ctoken)
+        else:
+            response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
         try:
             content = response['Contents']
         except KeyError:
             pass
         else:
             for c in content:
-                key = c['Key']
-                if accept_key(key):
-                    yield key
+                if accept_key(c):
+                    yield c
         ctoken = response.get('NextContinuationToken', None)
         if not ctoken:
             break
