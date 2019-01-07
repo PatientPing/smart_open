@@ -5,10 +5,13 @@ import io
 import contextlib
 import functools
 import logging
+import os
+import gzip
 
 import boto3
 import botocore.client
 import six
+import smart_open
 
 
 logger = logging.getLogger(__name__)
@@ -519,7 +522,7 @@ def iter_bucket(bucket_name, prefix='', accept_key=lambda key: True,
             if True or key_no % 1000 == 0:
                 logger.info(
                     "yielding key #%i: %s, size %i (total %.1fMB)",
-                    key_no, key['Key'], len(content), total_size / 1024.0 ** 2
+                    key_no, key, len(content), total_size / 1024.0 ** 2
                 )
             yield key, content
             total_size += len(content)
@@ -567,7 +570,7 @@ def _download_key(key_name, bucket_name=None, retries=3):
     # Retry up to 3 times to ensure its not a transient issue.
     for x in range(retries + 1):
         try:
-            content_bytes = _download_fileobj(bucket, key_name)
+            content_bytes = _download_fileobj(bucket, key_name['Key'])
         except botocore.client.ClientError:
             # Actually fail on last pass through the loop
             if x == retries:
@@ -585,8 +588,11 @@ def _download_fileobj(bucket, key_name):
     #
     buf = io.BytesIO()
     bucket.download_fileobj(key_name, buf)
-    return buf.getvalue()
-
+    _, ext = os.path.splitext(key_name)
+    if ext == '.gz':
+        return gzip.decompress(buf.getvalue())
+    else:
+        return buf.getvalue()
 
 class DummyPool(object):
     """A class that mimics multiprocessing.pool.Pool for our purposes."""
